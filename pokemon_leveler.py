@@ -1,10 +1,14 @@
+import pyautogui
 from pywinauto.application import Application, ProcessNotFoundError
 from pywinauto.findwindows import ElementNotFoundError
 from pywinauto.keyboard import send_keys
+from pywinauto.win32structures import RECT
 import os
 import time
 import cv2
 import numpy as np
+import ctypes
+import win32gui
 
 method = cv2.TM_SQDIFF_NORMED
 
@@ -40,7 +44,8 @@ def open_rom(main_dlg):
 # Sets the VBA window as active and resizes it
 # @Param main_dlg: Dialog for the main window
 def set_window(main_dlg):
-    main_dlg.move_window(x=None, y=None, width=480, height=320, repaint=True)
+    # 8px padding on each side and 43px for menu on top
+    main_dlg.move_window(x=None, y=None, width=256, height=219, repaint=True)
     main_dlg.set_focus()
 
 
@@ -52,32 +57,48 @@ def img_contains(img1, img2, threshold):
     # Execute matchTemplate to see if the 'Continue' option was found
     match = cv2.matchTemplate(img1, img2, method)
     mn, _, mnLoc, _ = cv2.minMaxLoc(match)
-
     # If the min value was les than .0001, the user does have a saved game
+    print(mn)
     return mn <= threshold
 
 
+# Presses and releases a key after a delay
+# @Param key: Key to be pressed
+def press_key(key):
+    send_keys("{" + key + " down}")
+    time.sleep(.0625)
+    send_keys("{" + key + " up}")
+
+
+def screenshot(window_title=None):
+    if window_title:
+        hwnd = win32gui.FindWindow(None, window_title)
+        if hwnd:
+            win32gui.SetForegroundWindow(hwnd)
+            x, y, x1, y1 = win32gui.GetClientRect(hwnd)
+            x, y = win32gui.ClientToScreen(hwnd, (x, y))
+            x1, y1 = win32gui.ClientToScreen(hwnd, (x1 - x, y1 - y))
+            im = pyautogui.screenshot(region=(x, y, x1, y1))
+            return im
+        else:
+            print('Window not found!')
+    else:
+        im = pyautogui.screenshot()
+        return im
+
 # Checks if there is a save file, if not then it begins a new game
 def start_game(main_dlg):
-    matching_debug = False
-    print('Waiting for ROM to load...')
-    time.sleep(2)
+    no_save_result = False
+    save_result = False
 
-    # Capture an image of the screen and convert it to cv2
-    img = main_dlg.capture_as_image()
-    numpy_img = np.array(img)
-    parent_img = cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR)
-
-    # Read a template image of the main menu
-    no_save_img = cv2.imread('img/menu_no_save.PNG')
-    save_img = cv2.imread('img/menu_save.PNG')
-    # Check if we are at the main menu
-    no_save_result = img_contains(parent_img, no_save_img, .003)
-    save_result = img_contains(parent_img, save_img, .003)
-
+    send_keys("{SPACE down}")
+    # Keep pressing z until we get to the main menu
     while not no_save_result and not save_result:
+        press_key('z')
+        # Wait for next frame to load before processing image
+        time.sleep(1)
         # Capture an image of the screen and convert it to cv2
-        img = main_dlg.capture_as_image()
+        img = screenshot(main_dlg.window_text())
         numpy_img = np.array(img)
         parent_img = cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR)
 
@@ -87,19 +108,25 @@ def start_game(main_dlg):
         # Check if we are at the main menu
         no_save_result = img_contains(parent_img, no_save_img, .003)
         save_result = img_contains(parent_img, save_img, .003)
-        print('Attempting to type z')
-        main_dlg.type_keys('z', vk_packet=False)
-        # send_keys("z", vk_packet=False)
 
+    send_keys("{SPACE up}")
+    # If there is a saved game, press z to get into the game
     if save_result:
-        print('Save menu found')
+        print('Saved game found...')
+        press_key('z')
+    # If there wasn't a saved game, inform the user and have them retry
     elif no_save_result:
-        print('You need to start a game and get some pokemon before you can level them!')
+        print('No saved game found. Please ensure you have a .sav file in the same directory as your ROM')
         exit(1)
 
+def map_image(main_dlg):
+    img = screenshot(main_dlg.window_text())
+    print(img.size)
 
 gba = connect_to_vba()
 dlg = gba.window(title_re='VisualBoyAdvance.*')
 open_rom(dlg)
 set_window(dlg)
 start_game(dlg)
+time.sleep(5)
+map_image(dlg)
