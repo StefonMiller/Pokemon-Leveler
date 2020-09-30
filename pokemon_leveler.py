@@ -12,7 +12,11 @@ import win32gui
 
 method = cv2.TM_SQDIFF_NORMED
 
+SCREEN_RES_X = 240
+SCREEN_RES_Y = 160
 
+CHARACTER_STARTING_POS = (((SCREEN_RES_X // 2) - 8), ((SCREEN_RES_Y // 2) - 8))
+CHARACTER_ENDING_POS = (((SCREEN_RES_X // 2) + 8), (SCREEN_RES_Y // 2) + 8)
 # Sets up pywinauto Application object. If a window is already open, it connects to that. Otherwise it creates a new
 # Application
 # @Return: Application object referencing the VBA window
@@ -45,7 +49,7 @@ def open_rom(main_dlg):
 # @Param main_dlg: Dialog for the main window
 def set_window(main_dlg):
     # 8px padding on each side and 43px for menu on top
-    main_dlg.move_window(x=None, y=None, width=256, height=219, repaint=True)
+    main_dlg.move_window(x=None, y=None, width=SCREEN_RES_X + 16, height=SCREEN_RES_Y + 59, repaint=True)
     main_dlg.set_focus()
 
 
@@ -86,6 +90,7 @@ def screenshot(window_title=None):
         im = pyautogui.screenshot()
         return im
 
+
 # Checks if there is a save file, if not then it begins a new game
 def start_game(main_dlg):
     no_save_result = False
@@ -101,7 +106,6 @@ def start_game(main_dlg):
         img = screenshot(main_dlg.window_text())
         numpy_img = np.array(img)
         parent_img = cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR)
-
         # Read a template image of the main menu
         no_save_img = cv2.imread('img/menu_no_save.PNG')
         save_img = cv2.imread('img/menu_save.PNG')
@@ -119,14 +123,28 @@ def start_game(main_dlg):
         print('No saved game found. Please ensure you have a .sav file in the same directory as your ROM')
         exit(1)
 
+def get_directions(img):
+    cv2.rectangle(img, CHARACTER_STARTING_POS, (CHARACTER_STARTING_POS[0] + 16, CHARACTER_STARTING_POS[1] - 16), (0, 0, 255), 1)
+    cv2.rectangle(img, CHARACTER_STARTING_POS, (CHARACTER_STARTING_POS[0] - 16, CHARACTER_STARTING_POS[1] + 16), (0, 0, 255), 1)
+    cv2.rectangle(img, CHARACTER_ENDING_POS, (CHARACTER_ENDING_POS[0] + 16, CHARACTER_ENDING_POS[1] - 16), (0, 0, 255), 1)
+    cv2.rectangle(img, CHARACTER_ENDING_POS, (CHARACTER_ENDING_POS[0] - 16, CHARACTER_ENDING_POS[1] + 16), (0, 0, 255), 1)
+    return img
+
 def map_image(main_dlg):
     img = screenshot(main_dlg.window_text())
-    print(img.size)
+    numpy_img = np.array(img)
+    parent_img = cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR)
+    child_img = cv2.imread('img/grass.PNG')
+    cv2.rectangle(parent_img, CHARACTER_STARTING_POS, CHARACTER_ENDING_POS, (0, 0, 255), 1)
+    parent_img = get_directions(parent_img)
+    cv2.imshow("HERE", parent_img)
+    cv2.waitKey(0)
+
 
 gba = connect_to_vba()
 dlg = gba.window(title_re='VisualBoyAdvance.*')
-open_rom(dlg)
-set_window(dlg)
-start_game(dlg)
-time.sleep(5)
+#open_rom(dlg)
+#set_window(dlg)
+#start_game(dlg)
+#time.sleep(5)
 map_image(dlg)
