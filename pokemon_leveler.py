@@ -17,6 +17,8 @@ SCREEN_RES_Y = 160
 
 CHARACTER_STARTING_POS = (((SCREEN_RES_X // 2) - 8), ((SCREEN_RES_Y // 2) - 8))
 CHARACTER_ENDING_POS = (((SCREEN_RES_X // 2) + 8), (SCREEN_RES_Y // 2) + 8)
+
+
 # Sets up pywinauto Application object. If a window is already open, it connects to that. Otherwise it creates a new
 # Application
 # @Return: Application object referencing the VBA window
@@ -58,11 +60,10 @@ def set_window(main_dlg):
 # @Param img2: Template image we are searching for in the larger image
 # @Param threshold: Threshold we would accept a match with
 def img_contains(img1, img2, threshold):
-    # Execute matchTemplate to see if the 'Continue' option was found
+    # Execute matchTemplate to see if the img2 is in img1
     match = cv2.matchTemplate(img1, img2, method)
     mn, _, mnLoc, _ = cv2.minMaxLoc(match)
-    # If the min value was les than .0001, the user does have a saved game
-    print(mn)
+    # If the min value was les than threshold, the template is not in the parent image
     return mn <= threshold
 
 
@@ -123,28 +124,61 @@ def start_game(main_dlg):
         print('No saved game found. Please ensure you have a .sav file in the same directory as your ROM')
         exit(1)
 
-def get_directions(img):
-    cv2.rectangle(img, CHARACTER_STARTING_POS, (CHARACTER_STARTING_POS[0] + 16, CHARACTER_STARTING_POS[1] - 16), (0, 0, 255), 1)
-    cv2.rectangle(img, CHARACTER_STARTING_POS, (CHARACTER_STARTING_POS[0] - 16, CHARACTER_STARTING_POS[1] + 16), (0, 0, 255), 1)
-    cv2.rectangle(img, CHARACTER_ENDING_POS, (CHARACTER_ENDING_POS[0] + 16, CHARACTER_ENDING_POS[1] - 16), (0, 0, 255), 1)
-    cv2.rectangle(img, CHARACTER_ENDING_POS, (CHARACTER_ENDING_POS[0] - 16, CHARACTER_ENDING_POS[1] + 16), (0, 0, 255), 1)
-    return img
 
+# Gets 16x16 tiles in each cardinal direction of the player's character from img and crops them into separate images
+# @Param img: Parent image to get tiles for
+# @return: dictionary of images representing the 4 tiles to the top, left, bottom, and right
+def get_directions(img):
+    # Crop images in each direction
+    top_img = img[CHARACTER_STARTING_POS[1] - 16: CHARACTER_STARTING_POS[1],
+              CHARACTER_STARTING_POS[0]: CHARACTER_STARTING_POS[0] + 16].copy()
+    left_img = img[CHARACTER_STARTING_POS[1]: CHARACTER_STARTING_POS[1] + 16,
+               CHARACTER_STARTING_POS[0] - 16: CHARACTER_STARTING_POS[0]].copy()
+    right_img = img[CHARACTER_ENDING_POS[1] - 16: CHARACTER_ENDING_POS[1],
+                CHARACTER_ENDING_POS[0]: CHARACTER_ENDING_POS[0] + 16].copy()
+    bottom_img = img[CHARACTER_ENDING_POS[1]: CHARACTER_ENDING_POS[1] + 16,
+                 CHARACTER_ENDING_POS[0] - 16: CHARACTER_ENDING_POS[0]].copy()
+    # cv2.rectangle(img, CHARACTER_STARTING_POS, (CHARACTER_STARTING_POS[0] + 16, CHARACTER_STARTING_POS[1] - 16), (0, 0, 255), 1)
+    # cv2.rectangle(img, CHARACTER_STARTING_POS, (CHARACTER_STARTING_POS[0] - 16, CHARACTER_STARTING_POS[1] + 16), (0, 0, 255), 1)
+    # cv2.rectangle(img, CHARACTER_ENDING_POS, (CHARACTER_ENDING_POS[0] + 16, CHARACTER_ENDING_POS[1] - 16), (0, 0, 255), 1)
+    # cv2.rectangle(img, CHARACTER_ENDING_POS, (CHARACTER_ENDING_POS[0] - 16, CHARACTER_ENDING_POS[1] + 16), (0, 0, 255), 1)
+    # cv2.imshow('Top', top_img)
+    # cv2.imshow('Left', left_img)
+    # cv2.imshow('Bottom', bottom_img)
+    # cv2.imshow('Right', right_img)
+    # Add images to dictionary and return it
+    imgs = {}
+    imgs['top'] = top_img
+    imgs['left'] = left_img
+    imgs['bottom'] = bottom_img
+    imgs['right'] = right_img
+    return imgs
+
+
+# Take screenshot of current game. Analyze tiles in all 4 directions to determine if grass is in any of them
 def map_image(main_dlg):
+    # Screenshot current frame and convert it into an opencv image
     img = screenshot(main_dlg.window_text())
     numpy_img = np.array(img)
     parent_img = cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR)
+    # Open a template image of grass for matching
     child_img = cv2.imread('img/grass.PNG')
-    cv2.rectangle(parent_img, CHARACTER_STARTING_POS, CHARACTER_ENDING_POS, (0, 0, 255), 1)
-    parent_img = get_directions(parent_img)
-    cv2.imshow("HERE", parent_img)
-    cv2.waitKey(0)
+    #cv2.rectangle(parent_img, CHARACTER_STARTING_POS, CHARACTER_ENDING_POS, (0, 0, 255), 1)
+    # Call get_directions to get the adjacent tiles
+    directions = get_directions(parent_img)
+    # cv2.imshow("HERE", parent_img)
+    # cv2.waitKey(0)
+    results = []
+    for direction in directions:
+        result = img_contains(directions[direction], child_img, .19)
+        print(f'{result} for {direction}')
+        results.append(result)
 
 
 gba = connect_to_vba()
 dlg = gba.window(title_re='VisualBoyAdvance.*')
-#open_rom(dlg)
-#set_window(dlg)
-#start_game(dlg)
-#time.sleep(5)
+# open_rom(dlg)
+set_window(dlg)
+# start_game(dlg)
+# time.sleep(5)
 map_image(dlg)
